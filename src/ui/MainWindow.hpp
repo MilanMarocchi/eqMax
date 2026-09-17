@@ -44,7 +44,8 @@ public:
 private:
     void setupUI();
     void setupHeaderBar(QVBoxLayout* mainLayout);
-    QWidget* createEqualizerTab();
+    QWidget* createBasicEQTab();
+    QWidget* createAdvancedEQTab();
     QWidget* createProEffectsTab();
     QWidget* createAppMixerTab();
     QWidget* createSpectrumTab();

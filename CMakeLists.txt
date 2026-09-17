@@ -39,6 +39,7 @@ set(SOURCES
     src/preset/PresetManager.cpp
     
     # GUI
+    src/ui/BasicEQWidget.cpp
     src/ui/SpectrumWidget.cpp
     src/ui/VUMeterWidget.cpp
     src/ui/CustomSlider.cpp
@@ -54,6 +55,7 @@ set(HEADERS
     src/audio/AudioDeviceManager.hpp
     src/audio/AppVolumeManager.hpp
     src/preset/PresetManager.hpp
+    src/ui/BasicEQWidget.hpp
     src/ui/SpectrumWidget.hpp
     src/ui/VUMeterWidget.hpp
     src/ui/CustomSlider.hpp

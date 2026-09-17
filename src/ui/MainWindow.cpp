@@ -1,4 +1,5 @@
 #include "MainWindow.hpp"
+#include "BasicEQWidget.hpp"
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QGroupBox>
@@ -115,13 +116,14 @@ void MainWindow::setupUI() {
 
     setupHeaderBar(mainLayout);
 
-    // Tab Widget
+    // Tab Widget (eqMac signature layout order)
     auto* tabWidget = new QTabWidget(this);
-    tabWidget->addTab(createEqualizerTab(), "Equalizer");
-    tabWidget->addTab(createProEffectsTab(), "Pro Sound Effects");
-    tabWidget->addTab(createAppMixerTab(), "App Mixer");
-    tabWidget->addTab(createSpectrumTab(), "Spectrum & VU Meter");
-    tabWidget->addTab(createDevicesTab(), "Devices & Diagnostics");
+    tabWidget->addTab(createBasicEQTab(), "BASIC");
+    tabWidget->addTab(createAdvancedEQTab(), "ADVANCED");
+    tabWidget->addTab(createProEffectsTab(), "EXPERT EFFECTS");
+    tabWidget->addTab(createAppMixerTab(), "APP MIXER");
+    tabWidget->addTab(createSpectrumTab(), "SPECTRUM");
+    tabWidget->addTab(createDevicesTab(), "DEVICES");
 
     mainLayout->addWidget(tabWidget, 1);
     setCentralWidget(central);
@@ -222,7 +224,11 @@ void MainWindow::setupHeaderBar(QVBoxLayout* mainLayout) {
     mainLayout->addWidget(header);
 }
 
-QWidget* MainWindow::createEqualizerTab() {
+QWidget* MainWindow::createBasicEQTab() {
+    return new BasicEQWidget(eqEngine_, this);
+}
+
+QWidget* MainWindow::createAdvancedEQTab() {
     auto* widget = new QWidget(this);
     auto* layout = new QVBoxLayout(widget);
     layout->setContentsMargins(16, 16, 16, 16);
