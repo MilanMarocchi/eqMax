@@ -1,0 +1,23 @@
+# Build directories
+build/
+build-*/
+.ninja*
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# macOS system files
+.DS_Store
+*.dSYM/
+
+# Nix artifacts
+result
+result-*
+.direnv/
+
+# IDE files
+.vscode/
+.idea/
+*.user
+*.suo
