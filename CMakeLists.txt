@@ -79,6 +79,7 @@ if(APPLE)
     find_library(ACCELERATE_LIB Accelerate REQUIRED)
     find_library(COCOA_LIB Cocoa REQUIRED)
     find_library(AUDIOUNIT_LIB AudioUnit REQUIRED)
+    find_library(AVFOUNDATION_LIB AVFoundation REQUIRED)
 
     target_link_libraries(eqMax PRIVATE
         ${COREAUDIO_LIB}
@@ -86,6 +87,7 @@ if(APPLE)
         ${ACCELERATE_LIB}
         ${COCOA_LIB}
         ${AUDIOUNIT_LIB}
+        ${AVFOUNDATION_LIB}
     )
 
     # Set macOS bundle properties

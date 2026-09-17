@@ -42,6 +42,11 @@ public:
     std::vector<AudioDeviceInfo> getAudioDevices();
 
     /**
+     * @brief Request macOS Microphone / System Audio Recording permissions via AVFoundation.
+     */
+    void requestAudioPermissions();
+
+    /**
      * @brief Set target input/output devices.
      */
     bool setOutputDevice(uint32_t deviceId);

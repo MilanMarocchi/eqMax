@@ -7,6 +7,7 @@
 #if defined(__APPLE__)
 #import <CoreAudio/CoreAudio.h>
 #import <AudioToolbox/AudioToolbox.h>
+#import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 #endif
 
@@ -160,8 +161,22 @@ bool AudioDeviceManager::setInputDevice(uint32_t deviceId) {
     return true;
 }
 
+void AudioDeviceManager::requestAudioPermissions() {
+#if defined(__APPLE__)
+    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL granted) {
+        if (granted) {
+            std::cout << "[AudioDeviceManager] macOS Microphone/System Audio Permission GRANTED!" << std::endl;
+        } else {
+            std::cout << "[AudioDeviceManager] macOS Microphone/System Audio Permission DENIED." << std::endl;
+        }
+    }];
+#endif
+}
+
 bool AudioDeviceManager::start() {
     if (isRunning_.load()) return true;
+
+    requestAudioPermissions();
 
 #if defined(__APPLE__)
     if (outputDeviceId_ == 0) {

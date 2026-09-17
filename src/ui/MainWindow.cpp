@@ -470,18 +470,57 @@ QWidget* MainWindow::createProEffectsTab() {
 
 QWidget* MainWindow::createSpectrumTab() {
     auto* widget = new QWidget(this);
-    auto* layout = new QHBoxLayout(widget);
-    layout->setContentsMargins(16, 16, 16, 16);
+    auto* outerLayout = new QVBoxLayout(widget);
+    outerLayout->setContentsMargins(16, 16, 16, 16);
+    outerLayout->setSpacing(12);
+
+    // Top Control Banner for Permissions & Test Audio
+    auto* bannerLayout = new QHBoxLayout();
+    
+    auto* permBtn = new QPushButton("Request macOS Audio Permission", widget);
+    permBtn->setStyleSheet("QPushButton { background: #00E5FF; color: #000; font-weight: bold; border-radius: 6px; padding: 6px 12px; }"
+                           "QPushButton:hover { background: #00B0FF; }");
+    connect(permBtn, &QPushButton::clicked, this, [this]() {
+        if (audioManager_) {
+            audioManager_->requestAudioPermissions();
+            QMessageBox::information(this, "macOS Permission Request", 
+                "macOS Audio Capture Permission has been requested.\n\n"
+                "If prompted, please click 'Allow' in the macOS System Dialog.\n"
+                "You can also verify in: System Settings -> Privacy & Security -> Microphone.");
+        }
+    });
+    bannerLayout->addWidget(permBtn);
+
+    auto* demoBtn = new QPushButton("Toggle Spectrum Demo (Pink Noise Generator)", widget);
+    demoBtn->setCheckable(true);
+    demoBtn->setStyleSheet("QPushButton { background: #28283A; color: #FFF; font-weight: bold; border-radius: 6px; padding: 6px 12px; }"
+                           "QPushButton:checked { background: #00C853; color: #000; }");
+    connect(demoBtn, &QPushButton::toggled, this, [this, demoBtn](bool active) {
+        if (audioManager_) {
+            audioManager_->setTestSignalType(active ? audio::TestSignalType::PinkNoise : audio::TestSignalType::None);
+            demoBtn->setText(active ? "Spectrum Demo: PLAYING (Pink Noise)" : "Toggle Spectrum Demo (Pink Noise Generator)");
+        }
+    });
+    bannerLayout->addWidget(demoBtn);
+
+    bannerLayout->addStretch(1);
+    outerLayout->addLayout(bannerLayout);
+
+    auto* spectrumContent = new QWidget(widget);
+    auto* layout = new QHBoxLayout(spectrumContent);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(16);
 
     if (spectrumAnalyzer_) {
-        auto* largeSpectrum = new SpectrumWidget(spectrumAnalyzer_, widget);
+        auto* largeSpectrum = new SpectrumWidget(spectrumAnalyzer_, spectrumContent);
         largeSpectrum->setNumBands(64);
         layout->addWidget(largeSpectrum, 3);
 
-        vuMeterWidget_ = new VUMeterWidget(spectrumAnalyzer_, widget);
+        vuMeterWidget_ = new VUMeterWidget(spectrumAnalyzer_, spectrumContent);
         layout->addWidget(vuMeterWidget_, 1);
     }
+
+    outerLayout->addWidget(spectrumContent, 1);
     return widget;
 }
 
