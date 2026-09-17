@@ -23,29 +23,33 @@ static OSStatus CoreAudioIOCallback(
     void* inClientData) {
 
     auto* manager = static_cast<AudioDeviceManager*>(inClientData);
-    if (!manager || !outOutputData) return noErr;
+    if (!manager) return noErr;
 
-    for (UInt32 i = 0; i < outOutputData->mNumberBuffers; ++i) {
-        AudioBuffer& buf = outOutputData->mBuffers[i];
+    const AudioBufferList* srcBufList = (inInputData && inInputData->mNumberBuffers > 0 && inInputData->mBuffers[0].mData) 
+                                        ? inInputData : outOutputData;
+    if (!srcBufList || srcBufList->mNumberBuffers == 0) return noErr;
+
+    for (UInt32 i = 0; i < srcBufList->mNumberBuffers; ++i) {
+        const AudioBuffer& buf = srcBufList->mBuffers[i];
         if (buf.mNumberChannels >= 2 && buf.mData) {
             auto* samples = static_cast<float*>(buf.mData);
             UInt32 numFrames = buf.mDataByteSize / (sizeof(float) * buf.mNumberChannels);
-            
-            // Non-interleaved or interleaved processing
+
             std::vector<float> leftBuffer(numFrames);
             std::vector<float> rightBuffer(numFrames);
 
-            if (buf.mNumberChannels == 2) {
-                for (UInt32 f = 0; f < numFrames; ++f) {
-                    leftBuffer[f] = samples[f * 2];
-                    rightBuffer[f] = samples[f * 2 + 1];
-                }
+            for (UInt32 f = 0; f < numFrames; ++f) {
+                leftBuffer[f] = samples[f * 2];
+                rightBuffer[f] = samples[f * 2 + 1];
+            }
 
-                manager->processAudioBlock(leftBuffer.data(), rightBuffer.data(), numFrames);
+            manager->processAudioBlock(leftBuffer.data(), rightBuffer.data(), numFrames);
 
+            if (outOutputData && i < outOutputData->mNumberBuffers && outOutputData->mBuffers[i].mData) {
+                auto* outSamples = static_cast<float*>(outOutputData->mBuffers[i].mData);
                 for (UInt32 f = 0; f < numFrames; ++f) {
-                    samples[f * 2] = leftBuffer[f];
-                    samples[f * 2 + 1] = rightBuffer[f];
+                    outSamples[f * 2] = leftBuffer[f];
+                    outSamples[f * 2 + 1] = rightBuffer[f];
                 }
             }
         }
@@ -80,7 +84,6 @@ std::vector<AudioDeviceInfo> AudioDeviceManager::getAudioDevices() {
     UInt32 dataSize = 0;
     OSStatus status = AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propertyAddress, 0, nullptr, &dataSize);
     if (status != noErr || dataSize == 0) {
-        // Fallback default virtual device
         devices.push_back({ 1, "default_speaker", "System Output (Built-in Speakers)", false, true, 44100 });
         devices.push_back({ 2, "default_headphone", "External Headphones", false, true, 48000 });
         return devices;
@@ -108,25 +111,14 @@ std::vector<AudioDeviceInfo> AudioDeviceManager::getAudioDevices() {
             CFRelease(deviceName);
         }
 
-        // Get device UID
-        CFStringRef deviceUID = nullptr;
-        propertyAddress.mSelector = kAudioDevicePropertyDeviceUID;
-        if (AudioObjectGetPropertyData(devId, &propertyAddress, 0, nullptr, &dataSize, &deviceUID) == noErr && deviceUID) {
-            char uidBuf[256];
-            if (CFStringGetCString(deviceUID, uidBuf, sizeof(uidBuf), kCFStringEncodingUTF8)) {
-                info.uid = uidBuf;
-            }
-            CFRelease(deviceUID);
-        }
-
-        // Check if device supports output channels
+        // Check output capability
         propertyAddress.mSelector = kAudioDevicePropertyStreamConfiguration;
         propertyAddress.mScope = kAudioDevicePropertyScopeOutput;
         if (AudioObjectGetPropertyDataSize(devId, &propertyAddress, 0, nullptr, &dataSize) == noErr && dataSize > 0) {
             info.isOutput = true;
         }
 
-        // Check input channels
+        // Check input capability
         propertyAddress.mScope = kAudioDevicePropertyScopeInput;
         if (AudioObjectGetPropertyDataSize(devId, &propertyAddress, 0, nullptr, &dataSize) == noErr && dataSize > 0) {
             info.isInput = true;
@@ -150,8 +142,15 @@ std::vector<AudioDeviceInfo> AudioDeviceManager::getAudioDevices() {
 }
 
 bool AudioDeviceManager::setOutputDevice(uint32_t deviceId) {
+    if (outputDeviceId_ == deviceId && isRunning_.load()) return true;
+
+    bool wasRunning = isRunning_.load();
+    if (wasRunning) stop();
+
     outputDeviceId_ = deviceId;
     std::cout << "[AudioDeviceManager] Selected Output Device ID: " << deviceId << std::endl;
+
+    if (wasRunning) start();
     return true;
 }
 
@@ -163,9 +162,22 @@ bool AudioDeviceManager::setInputDevice(uint32_t deviceId) {
 
 bool AudioDeviceManager::start() {
     if (isRunning_.load()) return true;
-    isRunning_.store(true);
 
 #if defined(__APPLE__)
+    if (outputDeviceId_ == 0) {
+        AudioDeviceID defaultOutput = 0;
+        UInt32 size = sizeof(AudioDeviceID);
+        AudioObjectPropertyAddress addr = {
+            kAudioHardwarePropertyDefaultOutputDevice,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &addr, 0, nullptr, &size, &defaultOutput) == noErr) {
+            outputDeviceId_ = defaultOutput;
+            std::cout << "[AudioDeviceManager] Detected System Default Output Device ID: " << defaultOutput << std::endl;
+        }
+    }
+
     if (outputDeviceId_ > 0) {
         AudioDeviceID devId = static_cast<AudioDeviceID>(outputDeviceId_);
         AudioDeviceIOProcID procId = nullptr;
@@ -173,11 +185,14 @@ bool AudioDeviceManager::start() {
         if (status == noErr && procId) {
             audioProcHandle_ = reinterpret_cast<uintptr_t>(procId);
             AudioDeviceStart(devId, procId);
-            std::cout << "[AudioDeviceManager] CoreAudio Hardware IOProc started." << std::endl;
+            isRunning_.store(true);
+            std::cout << "[AudioDeviceManager] CoreAudio Hardware IOProc started on device " << devId << std::endl;
+            return true;
         }
     }
 #endif
 
+    isRunning_.store(true);
     std::cout << "[AudioDeviceManager] Audio DSP Engine Started." << std::endl;
     return true;
 }

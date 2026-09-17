@@ -173,15 +173,15 @@ void MainWindow::setupHeaderBar(QVBoxLayout* mainLayout) {
 
     hLayout->addStretch(1);
 
-    // Master Volume Boost Slider
-    auto* volLabel = new QLabel("Boost:", header);
+    // Master Volume Control Slider (-60.0 dB to +24.0 dB)
+    auto* volLabel = new QLabel("Volume:", header);
     volLabel->setStyleSheet("color: #A0A0B0; font-size: 12px; font-weight: 600;");
     hLayout->addWidget(volLabel);
 
     masterVolumeSlider_ = new QSlider(Qt::Horizontal, header);
-    masterVolumeSlider_->setRange(0, 240); // 0.0dB to +24.0dB
-    masterVolumeSlider_->setValue(0);
-    masterVolumeSlider_->setFixedWidth(120);
+    masterVolumeSlider_->setRange(-600, 240); // -60.0 dB to +24.0 dB
+    masterVolumeSlider_->setValue(0); // 0.0 dB default (100%)
+    masterVolumeSlider_->setFixedWidth(140);
     masterVolumeSlider_->setStyleSheet(R"(
         QSlider::groove:horizontal { background: #2A2A3A; height: 6px; border-radius: 3px; }
         QSlider::sub-page:horizontal { background: #00E5FF; border-radius: 3px; }
@@ -190,14 +190,32 @@ void MainWindow::setupHeaderBar(QVBoxLayout* mainLayout) {
     hLayout->addWidget(masterVolumeSlider_);
 
     masterVolumeLabel_ = new QLabel("0.0 dB", header);
-    masterVolumeLabel_->setStyleSheet("color: #00E5FF; font-size: 12px; font-weight: bold; width: 50px;");
+    masterVolumeLabel_->setStyleSheet("color: #00E5FF; font-size: 12px; font-weight: bold; width: 60px;");
     hLayout->addWidget(masterVolumeLabel_);
 
     connect(masterVolumeSlider_, &QSlider::valueChanged, this, [this](int val) {
         float db = static_cast<float>(val) / 10.0f;
-        masterVolumeLabel_->setText(QString("+%1 dB").arg(db, 0, 'f', 1));
+        if (val > 0) {
+            masterVolumeLabel_->setText(QString("+%1 dB").arg(db, 0, 'f', 1));
+            masterVolumeLabel_->setStyleSheet("color: #00E5FF; font-size: 12px; font-weight: bold; width: 60px;");
+        } else if (val < 0) {
+            masterVolumeLabel_->setText(QString("%1 dB").arg(db, 0, 'f', 1));
+            masterVolumeLabel_->setStyleSheet("color: #FF5252; font-size: 12px; font-weight: bold; width: 60px;");
+        } else {
+            masterVolumeLabel_->setText("0.0 dB");
+            masterVolumeLabel_->setStyleSheet("color: #FFFFFF; font-size: 12px; font-weight: bold; width: 60px;");
+        }
+
         if (effectsEngine_) {
             effectsEngine_->setVolumeBoostdB(db);
+        }
+        if (volumeBoostSlider_ && volumeBoostSlider_->value() != val) {
+            volumeBoostSlider_->blockSignals(true);
+            volumeBoostSlider_->setValue(val);
+            if (volumeBoostLabel_) {
+                volumeBoostLabel_->setText(val > 0 ? QString("+%1 dB").arg(db, 0, 'f', 1) : QString("%1 dB").arg(db, 0, 'f', 1));
+            }
+            volumeBoostSlider_->blockSignals(false);
         }
     });
 
@@ -330,21 +348,31 @@ QWidget* MainWindow::createProEffectsTab() {
     grid->setHorizontalSpacing(30);
     grid->setVerticalSpacing(20);
 
-    // 1. Volume Boost Overdrive
-    auto* groupBoost = new QGroupBox("Volume Boost Overdrive (+24 dB)", widget);
+    // 1. Volume Control & Overdrive (-60.0 dB to +24.0 dB)
+    auto* groupBoost = new QGroupBox("Master Volume Control (-60 dB to +24 dB)", widget);
     auto* boostLayout = new QVBoxLayout(groupBoost);
     volumeBoostSlider_ = new QSlider(Qt::Horizontal, groupBoost);
-    volumeBoostSlider_->setRange(0, 240);
+    volumeBoostSlider_->setRange(-600, 240);
     volumeBoostSlider_->setValue(0);
-    volumeBoostLabel_ = new QLabel("+0.0 dB Boost", groupBoost);
+    volumeBoostLabel_ = new QLabel("0.0 dB (100%)", groupBoost);
     volumeBoostLabel_->setStyleSheet("color: #00E5FF; font-weight: bold;");
     boostLayout->addWidget(volumeBoostSlider_);
     boostLayout->addWidget(volumeBoostLabel_);
     connect(volumeBoostSlider_, &QSlider::valueChanged, this, [this](int val) {
         float db = static_cast<float>(val) / 10.0f;
-        volumeBoostLabel_->setText(QString("+%1 dB Boost").arg(db, 0, 'f', 1));
+        if (val > 0) volumeBoostLabel_->setText(QString("+%1 dB Boost").arg(db, 0, 'f', 1));
+        else if (val < 0) volumeBoostLabel_->setText(QString("%1 dB Attenuated").arg(db, 0, 'f', 1));
+        else volumeBoostLabel_->setText("0.0 dB (100% Unity)");
+
         if (effectsEngine_) effectsEngine_->setVolumeBoostdB(db);
-        if (masterVolumeSlider_) masterVolumeSlider_->setValue(val);
+        if (masterVolumeSlider_ && masterVolumeSlider_->value() != val) {
+            masterVolumeSlider_->blockSignals(true);
+            masterVolumeSlider_->setValue(val);
+            if (masterVolumeLabel_) {
+                masterVolumeLabel_->setText(val > 0 ? QString("+%1 dB").arg(db, 0, 'f', 1) : QString("%1 dB").arg(db, 0, 'f', 1));
+            }
+            masterVolumeSlider_->blockSignals(false);
+        }
     });
     grid->addWidget(groupBoost, 0, 0);
 

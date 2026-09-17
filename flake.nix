@@ -77,6 +77,7 @@
             TARGET_DIR="$HOME/Applications"
             mkdir -p "$TARGET_DIR"
             echo "Installing eqMax.app into $TARGET_DIR/..."
+            chmod -R +w "$TARGET_DIR/eqMax.app" 2>/dev/null || true
             rm -rf "$TARGET_DIR/eqMax.app"
             cp -R result/Applications/eqMax.app "$TARGET_DIR/"
             echo "=========================================================="
