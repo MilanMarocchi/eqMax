@@ -91,8 +91,9 @@ private:
     float sweepPhase_{0.0f};
     uint32_t pinkNoiseState_{0x12345678};
 
-    // CoreAudio OS X handle pointer
+    // CoreAudio OS X handle pointers
     uintptr_t audioProcHandle_{0};
+    uintptr_t audioInputProcHandle_{0};
 };
 
 } // namespace eqmax::audio
