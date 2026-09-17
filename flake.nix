@@ -60,6 +60,30 @@
           cmakeFlags = [
             "-DCMAKE_BUILD_TYPE=Release"
           ];
+
+          postInstall = ''
+            mkdir -p $out/Applications
+            if [ -d "$out/bin/eqMax.app" ]; then
+              mv $out/bin/eqMax.app $out/Applications/eqMax.app
+            fi
+          '';
+        };
+
+        apps.install = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "install-eqmax" ''
+            echo "Building eqMax.app..."
+            ${pkgs.nix}/bin/nix build .#default
+            TARGET_DIR="$HOME/Applications"
+            mkdir -p "$TARGET_DIR"
+            echo "Installing eqMax.app into $TARGET_DIR/..."
+            rm -rf "$TARGET_DIR/eqMax.app"
+            cp -R result/Applications/eqMax.app "$TARGET_DIR/"
+            echo "=========================================================="
+            echo " Successfully installed eqMax.app in $TARGET_DIR/eqMax.app!"
+            echo " You can open it from Launchpad or Finder -> Applications."
+            echo "=========================================================="
+          '');
         };
       }
     );

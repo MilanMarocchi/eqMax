@@ -33,6 +33,7 @@ set(SOURCES
     
     # Audio & CoreAudio HAL Driver Interface
     src/audio/AudioDeviceManager.mm
+    src/audio/AppVolumeManager.mm
     
     # Preset System
     src/preset/PresetManager.cpp
@@ -51,6 +52,7 @@ set(HEADERS
     src/dsp/ProEffectsEngine.hpp
     src/dsp/SpectrumAnalyzer.hpp
     src/audio/AudioDeviceManager.hpp
+    src/audio/AppVolumeManager.hpp
     src/preset/PresetManager.hpp
     src/ui/SpectrumWidget.hpp
     src/ui/VUMeterWidget.hpp
@@ -87,11 +89,17 @@ if(APPLE)
     # Set macOS bundle properties
     set_target_properties(eqMax PROPERTIES
         MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_BUNDLE_NAME "eqMax"
+        MACOSX_BUNDLE_BUNDLE_NAME "eqMax Pro"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.eqmax.equalizer"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0"
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/macOS/Info.plist.in
     )
 endif()
+
+install(TARGETS eqMax
+    BUNDLE DESTINATION Applications
+    RUNTIME DESTINATION bin
+)
 
 # Compiler warnings
 if(MSVC)

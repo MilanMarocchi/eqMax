@@ -16,6 +16,7 @@
 #include "../dsp/ProEffectsEngine.hpp"
 #include "../dsp/SpectrumAnalyzer.hpp"
 #include "../audio/AudioDeviceManager.hpp"
+#include "../audio/AppVolumeManager.hpp"
 #include "../preset/PresetManager.hpp"
 #include "CustomSlider.hpp"
 #include "SpectrumWidget.hpp"
@@ -31,6 +32,7 @@ public:
         std::shared_ptr<dsp::ProEffectsEngine> effectsEngine,
         std::shared_ptr<dsp::SpectrumAnalyzer> spectrumAnalyzer,
         std::shared_ptr<audio::AudioDeviceManager> audioManager,
+        std::shared_ptr<audio::AppVolumeManager> appVolumeManager,
         std::shared_ptr<preset::PresetManager> presetManager,
         QWidget* parent = nullptr
     );
@@ -44,10 +46,12 @@ private:
     void setupHeaderBar(QVBoxLayout* mainLayout);
     QWidget* createEqualizerTab();
     QWidget* createProEffectsTab();
+    QWidget* createAppMixerTab();
     QWidget* createSpectrumTab();
     QWidget* createDevicesTab();
 
     void rebuildEQSliders(dsp::EQMode mode);
+    void refreshAppMixerList(QVBoxLayout* containerLayout);
     void updateDeviceDropdowns();
     void saveCurrentAsUserPreset();
 
@@ -55,6 +59,7 @@ private:
     std::shared_ptr<dsp::ProEffectsEngine> effectsEngine_;
     std::shared_ptr<dsp::SpectrumAnalyzer> spectrumAnalyzer_;
     std::shared_ptr<audio::AudioDeviceManager> audioManager_;
+    std::shared_ptr<audio::AppVolumeManager> appVolumeManager_;
     std::shared_ptr<preset::PresetManager> presetManager_;
 
     // Header Controls

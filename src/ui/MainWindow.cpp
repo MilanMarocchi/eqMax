@@ -13,6 +13,7 @@ MainWindow::MainWindow(
     std::shared_ptr<dsp::ProEffectsEngine> effectsEngine,
     std::shared_ptr<dsp::SpectrumAnalyzer> spectrumAnalyzer,
     std::shared_ptr<audio::AudioDeviceManager> audioManager,
+    std::shared_ptr<audio::AppVolumeManager> appVolumeManager,
     std::shared_ptr<preset::PresetManager> presetManager,
     QWidget* parent)
     : QMainWindow(parent),
@@ -20,6 +21,7 @@ MainWindow::MainWindow(
       effectsEngine_(std::move(effectsEngine)),
       spectrumAnalyzer_(std::move(spectrumAnalyzer)),
       audioManager_(std::move(audioManager)),
+      appVolumeManager_(std::move(appVolumeManager)),
       presetManager_(std::move(presetManager)) {
 
     setupUI();
@@ -117,6 +119,7 @@ void MainWindow::setupUI() {
     auto* tabWidget = new QTabWidget(this);
     tabWidget->addTab(createEqualizerTab(), "Equalizer");
     tabWidget->addTab(createProEffectsTab(), "Pro Sound Effects");
+    tabWidget->addTab(createAppMixerTab(), "App Mixer");
     tabWidget->addTab(createSpectrumTab(), "Spectrum & VU Meter");
     tabWidget->addTab(createDevicesTab(), "Devices & Diagnostics");
 
@@ -548,6 +551,126 @@ void MainWindow::saveCurrentAsUserPreset() {
     }
 }
 
+QWidget* MainWindow::createAppMixerTab() {
+    auto* widget = new QWidget(this);
+    auto* layout = new QVBoxLayout(widget);
+    layout->setContentsMargins(16, 16, 16, 16);
+
+    // Top control bar for App Mixer
+    auto* topBar = new QHBoxLayout();
+    auto* titleLabel = new QLabel("Per-Application Audio Volume Mixer", widget);
+    titleLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #00E5FF;");
+    topBar->addWidget(titleLabel);
+
+    topBar->addStretch(1);
+
+    auto* refreshBtn = new QPushButton("Refresh Applications", widget);
+    topBar->addWidget(refreshBtn);
+    layout->addLayout(topBar);
+
+    // Scrollable container for app volume rows
+    auto* scrollArea = new QScrollArea(widget);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setStyleSheet("QScrollArea { border: none; background: transparent; }");
+
+    auto* listContainer = new QWidget(scrollArea);
+    auto* containerLayout = new QVBoxLayout(listContainer);
+    containerLayout->setContentsMargins(8, 8, 8, 8);
+    containerLayout->setSpacing(10);
+
+    scrollArea->setWidget(listContainer);
+    layout->addWidget(scrollArea, 1);
+
+    auto refreshAction = [this, containerLayout]() {
+        refreshAppMixerList(containerLayout);
+    };
+
+    connect(refreshBtn, &QPushButton::clicked, this, refreshAction);
+    refreshAction(); // Initial scan
+
+    return widget;
+}
+
+void MainWindow::refreshAppMixerList(QVBoxLayout* containerLayout) {
+    if (!containerLayout || !appVolumeManager_) return;
+
+    // Clear previous items
+    QLayoutItem* child;
+    while ((child = containerLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) child->widget()->deleteLater();
+        delete child;
+    }
+
+    auto apps = appVolumeManager_->getRunningApplications();
+
+    if (apps.empty()) {
+        auto* emptyLabel = new QLabel("No active GUI applications detected.", containerLayout->parentWidget());
+        emptyLabel->setAlignment(Qt::AlignCenter);
+        emptyLabel->setStyleSheet("color: #707080; font-size: 14px; margin-top: 40px;");
+        containerLayout->addWidget(emptyLabel);
+        return;
+    }
+
+    for (const auto& app : apps) {
+        auto* card = new QWidget(containerLayout->parentWidget());
+        card->setStyleSheet("background: #1C1C26; border-radius: 8px; padding: 10px;");
+        auto* cardLayout = new QHBoxLayout(card);
+        cardLayout->setContentsMargins(12, 8, 12, 8);
+
+        // App Info
+        auto* nameLabel = new QLabel(QString::fromStdString(app.appName), card);
+        nameLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: #FFFFFF;");
+        nameLabel->setFixedWidth(180);
+        cardLayout->addWidget(nameLabel);
+
+        auto* pidBadge = new QLabel(QString("PID: %1").arg(app.pid), card);
+        pidBadge->setStyleSheet("color: #707085; font-size: 11px;");
+        pidBadge->setFixedWidth(70);
+        cardLayout->addWidget(pidBadge);
+
+        // Volume Slider (0% to 200%)
+        auto* slider = new QSlider(Qt::Horizontal, card);
+        slider->setRange(0, 200);
+        slider->setValue(static_cast<int>(app.volume * 100.0f));
+        slider->setStyleSheet(R"(
+            QSlider::groove:horizontal { background: #2A2A3A; height: 6px; border-radius: 3px; }
+            QSlider::sub-page:horizontal { background: #00E5FF; border-radius: 3px; }
+            QSlider::handle:horizontal { background: #FFF; width: 14px; margin: -4px 0; border-radius: 7px; }
+        )");
+        cardLayout->addWidget(slider, 1);
+
+        // Volume Readout
+        auto* volReadout = new QLabel(QString("%1%").arg(static_cast<int>(app.volume * 100.0f)), card);
+        volReadout->setStyleSheet("color: #00E5FF; font-weight: bold; font-size: 12px; width: 45px;");
+        cardLayout->addWidget(volReadout);
+
+        // Mute Button
+        int pid = app.pid;
+        auto* muteBtn = new QPushButton(app.isMuted ? "MUTED" : "Mute", card);
+        muteBtn->setCheckable(true);
+        muteBtn->setChecked(app.isMuted);
+        muteBtn->setStyleSheet(app.isMuted ? "background: #E53935; color: #FFF; font-weight: bold;"
+                                           : "background: #282836; color: #FFF;");
+        
+        connect(slider, &QSlider::valueChanged, this, [this, pid, volReadout](int val) {
+            float vol = static_cast<float>(val) / 100.0f;
+            volReadout->setText(QString("%1%").arg(val));
+            if (appVolumeManager_) appVolumeManager_->setAppVolume(pid, vol);
+        });
+
+        connect(muteBtn, &QPushButton::toggled, this, [this, pid, muteBtn](bool checked) {
+            muteBtn->setText(checked ? "MUTED" : "Mute");
+            muteBtn->setStyleSheet(checked ? "background: #E53935; color: #FFF; font-weight: bold;"
+                                           : "background: #282836; color: #FFF;");
+            if (appVolumeManager_) appVolumeManager_->setAppMute(pid, checked);
+        });
+
+        cardLayout->addWidget(muteBtn);
+        containerLayout->addWidget(card);
+    }
+    containerLayout->addStretch(1);
+}
+
 void MainWindow::setBypass(bool bypassed) {
     if (eqEngine_) {
         eqEngine_->setBypass(bypassed);
@@ -555,3 +678,4 @@ void MainWindow::setBypass(bool bypassed) {
 }
 
 } // namespace eqmax::ui
+
