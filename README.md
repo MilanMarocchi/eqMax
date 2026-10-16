@@ -1,109 +1,153 @@
-# eqMax Pro - macOS System Audio Equalizer & Pro Enhancer
+# eqMax
 
-**eqMax** is a high-performance system-wide audio equalizer and pro sound enhancer for macOS, built with **Modern C++20**, **Qt 6**, **Apple CoreAudio**, and Apple **vDSP (Accelerate framework)**. It takes inspiration from eqMac’s compact audio controls, with a native Qt interface and Core Audio process-tap routing on macOS 14.2 or newer.
+eqMax is a macOS system audio equalizer and per-application volume mixer. It captures application audio with Core Audio process taps, applies stereo EQ and effects, and plays the result through your chosen output device. It uses C++20, Qt 6 Widgets, and Apple's Accelerate framework.
 
----
+The interface has collapsible sections for Output, Volume, Equalizers, Effects, Applications, and Analyzer. A menu bar icon keeps the controls available when the window is closed.
 
-## 🌟 Features & Pro Capabilities
+## Features
 
-- 🎚️ **Multi-Band Equalizer Engine**:
-  - **3-Band Mode**: Quick Bass, Mid, and Treble shelf adjustment.
-  - **10-Band Mode**: ISO standard 10-band octave frequencies (32 Hz - 16 kHz).
-  - **32-Band Mode (Pro)**: High-precision 1/3 octave ISO standard band EQ (20 Hz - 20 kHz).
-  - Stereo IIR biquad cascades, with coefficient changes applied on the audio thread at buffer boundaries and tuning matched to the output sample rate.
-- 🔊 **Volume Boost Overdrive (+24 dB)**:
-  - Amplifies audio volume beyond 100% standard limits.
-  - Stereo-linked **peak limiter** with a 0.98 ceiling and 50 ms release. Signals below the ceiling pass through without saturation at unity settings.
-- 🎧 **3D Spatial Audio & Surround Sound**:
-  - Mid-side stereo width adjustment, from mono through normal stereo to wider stereo.
-- ⚖️ **Stereo Balance & Channel Control**:
-  - Logarithmic constant-power panning law.
-- 🎸 **Sub-Bass & Treble Clarity Sub-Engine**:
-  - Dedicated instant-boost dials for deep punchy bass and crystalline high frequencies.
-- 📊 **60 FPS Real-Time Spectrum Analyzer & VU Meter**:
-  - Hardware-accelerated Qt custom canvas rendering vDSP FFT frequency spectrum bars with peak hold decay and L/R channel VU level meters with overload LEDs.
-- 🎛️ **Preset Management System**:
-  - Includes 11 Factory Presets (*Flat, Bass Booster, Treble Booster, Rock, Pop, Jazz, Electronic, Vocal, Classical, Acoustic, Gaming/Movies*).
-  - Create, save, delete, export, and import custom user presets stored in `~/.config/eqMax/presets/`. New files use validated JSON and atomic writes; the original line-based files remain readable.
-- 📌 **macOS System Tray Menu Bar Integration**:
-  - Quick access from the macOS status bar (`QSystemTrayIcon`): bypass EQ and effects, switch presets on the fly, or show/hide the main window.
-- 🛠️ **Audio Routing & Built-in Signal Generator**:
-  - CoreAudio device selector (Speakers, Headphones, Display Audio), refreshed when devices connect or disconnect. Internal routing devices are hidden.
-  - Built-in audio test signal generator (1 kHz Sine, Pink Noise, Frequency Sweep) for out-of-the-box testing without requiring kernel drivers.
+### Equalizer
 
----
+All modes offer gains from **−12 dB to +12 dB**, an editable response graph, and a Reset button that flattens the EQ bands.
 
-## 🚀 Quick Start with Nix
+| Mode | Controls |
+| --- | --- |
+| Basic | Bass, Mid, and Treble knobs at 100 Hz, 1 kHz, and 10 kHz |
+| Advanced | 10 fixed bands from 32 Hz to 16 kHz |
+| Expert | 32 fixed bands from 20 Hz to 20 kHz |
 
-Everything in the project is managed with **Nix** (`flake.nix`).
+Drag graph points or adjust the knobs and band faders to change gain. Band frequencies and filter widths are fixed. Switching EQ modes resets the band gains; loading a preset restores its saved mode and gains.
 
-### 1. Enter Development Shell
+### Volume and effects
+
+- **Master gain:** −60 dB to +24 dB, with left/right balance.
+- **Bass Boost:** a 90 Hz low-shelf boost from 0 to +12 dB.
+- **Clarity:** an 8 kHz high-shelf boost from 0 to +12 dB.
+- **Stereo Width:** mid-side processing from 0% (mono), through 100% (original stereo), to 200% (wider stereo).
+- **Limiter:** an optional stereo-linked peak limiter, enabled by default, with a 0.98 ceiling and a 50 ms release.
+
+The header power button and **⌘B** bypass the EQ and the entire effects chain, including master gain, balance, and limiting. Per-application volume and mute remain active while bypassed.
+
+### Per-application mixer
+
+The Applications section lists apps connected to the audio server, groups helper processes under their owning app, and indicates which apps are playing. Each app has a **0–200%** volume slider and a mute button. Customized levels and mute states are saved between launches.
+
+### Presets and saved settings
+
+There are 11 factory presets: Flat, Bass Booster, Treble Booster, Rock, Pop, Jazz, Electronic, Vocal Booster, Classical, Acoustic, and Gaming / Movies.
+
+Use **Save** or **⌘S** to save the current EQ, gain, balance, width, boost, and limiter settings as a user preset. The **•••** menu imports presets, exports the current settings, and deletes user presets. Import loads a sound for auditioning; use Save to add it to your library. Editing a sound changes the preset selector to **Custom**.
+
+User presets are validated JSON stored in `.eqpreset` files under `~/.config/eqMax/presets/`, with atomic writes. The original line-based eqMax preset format can also be read. Factory presets cannot be overwritten or deleted.
+
+The app also restores the current sound, bypass state, selected output, window geometry, and collapsed sections. Test signals start off on every launch.
+
+### Analyzer and test signals
+
+The Analyzer section shows a 64-band FFT spectrum with peak hold and stereo level meters with clipping indicators. These display audio after EQ and effects, using custom QPainter widgets.
+
+**Output → Setup** provides a 1 kHz sine wave, a noise generator, and a sine sweep, plus controls to open audio permissions and restart routing. Test signals mix with captured audio and pass through the EQ and effects. The noise option is labeled “Pink Noise” in the UI; its current implementation produces unfiltered pseudorandom noise.
+
+## Requirements
+
+- **macOS 14.2 or newer** for Core Audio process taps. System audio routing is implemented for macOS.
+- Permission to record system audio.
+- For the Nix workflow below: **Nix with flakes enabled**. The flake supplies CMake, Ninja, Qt 6, and the Apple SDK.
+- For a manually configured build: a C++20/Objective-C++ toolchain, a macOS SDK with process-tap APIs, CMake 3.20+, and Qt 6 with Core, Gui, Widgets, and Test components.
+
+eqMax uses process taps and a private aggregate device created at runtime; no separate virtual audio driver or kernel extension needs to be installed. Processing is stereo, including when the selected output has more channels.
+
+## Build and run
+
+Clone the repository and enter its development shell:
+
 ```bash
+git clone git@github.com:MilanMarocchi/eqMax.git
+cd eqMax
 nix develop
 ```
 
-### 2. Build the Application
+Run these commands inside that shell:
+
 ```bash
-nix develop --command bash -c "mkdir -p build && cd build && cmake .. -GNinja && ninja"
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/eqMax.app/Contents/MacOS/eqMax
 ```
 
-### 3. Run DSP Unit Tests
+The development app bundle is written to `build/eqMax.app`. CMake ad-hoc signs the bundle when `codesign` is available.
+
+### Install with Nix
+
+From the repository directory, build the Nix package:
+
 ```bash
-nix develop --command ctest --test-dir build --output-on-failure
+nix build
 ```
 
-### 4. Launch eqMax App
+The packaged app is available at `result/Applications/eqMax.app`. The included installer builds the package and copies it to `~/Applications/eqMax.app`, replacing an existing copy there:
+
 ```bash
-nix develop --command ./build/eqMax.app/Contents/MacOS/eqMax
+nix run .#install
+open ~/Applications/eqMax.app
 ```
 
----
+The Nix package uses dependencies in the Nix store; the copied bundle should not be treated as a standalone distribution for machines without those dependencies.
 
-## Everyday controls
+## First launch and audio routing
 
-- Drag the points on the EQ response graph, use the band faders, or switch to Basic for Bass / Mid / Treble knobs. Expert offers a **fixed 32-band graphic EQ**, rather than a parametric EQ.
-- Arrow keys adjust focused knobs and faders. On the graph, Left/Right selects a band and Up/Down changes its gain. Shift gives finer steps; Home resets the selected control.
-- **⌘B** bypasses EQ and effects; application mixer levels remain independent. **⌘S** saves a preset.
-- The preset menu (**•••**) imports, exports, and deletes presets. Imported sounds open for auditioning; use Save to add them to your library. Editing a sound changes the selector to Custom.
-- Sound settings, application levels/mutes, selected output, window geometry, and collapsed sections restore on the next launch. Test signals always start off.
-- Output → Setup provides test signals, the system audio permission link, and a routing restart button. macOS prompts for system audio recording access when capture starts.
+1. Launch eqMax and allow system audio recording when macOS prompts.
+2. Choose **System Default Output** to follow the macOS output, or select a specific output device in the Output section.
+3. Play audio from another application, then adjust its volume or the shared EQ and effects. With processing enabled and routing active, the header displays the output sample rate.
 
-The regression suite checks DSP response at 44.1/48/96 kHz, limiter transparency and bypass, preset validation and legacy loading, graph editing, mixer persistence, and session restore. The UI test runs offscreen without starting audio capture and writes `build/tests/ui-preview.png` for visual inspection.
+If the header shows **Not routing**, or captured audio is silent, use **Output → Setup → System Audio Recording permission…** to open the relevant privacy settings and enable eqMax. Then use **Restart audio routing**, or quit and relaunch eqMax. The in-app permission help points to **Privacy & Security → Screen & System Audio Recording → System Audio Recording Only**; the wording can vary with the macOS version.
 
-## 📂 Project Architecture
+The output list refreshes as devices connect or disconnect. eqMax excludes its own playback from capture to avoid feedback, mixes captured apps, and renders the processed stereo signal to the chosen device. Quitting tears down the taps and routing device so applications resume direct playback.
 
+Closing the window leaves eqMax running in the menu bar. Use the menu bar icon to reopen the window, bypass processing, select a preset, or **Quit eqMax**.
+
+## Keyboard and mouse controls
+
+| Control | Action |
+| --- | --- |
+| ⌘B | Toggle bypass for EQ and effects |
+| ⌘S | Save the current sound as a user preset |
+| Arrow keys on a focused knob or band fader | Adjust its value |
+| Left/Right on the response graph | Select a band |
+| Up/Down on the response graph | Adjust the selected band's gain |
+| Shift while adjusting a knob, band fader, or graph point | Use finer steps |
+| Double-click a knob, band fader, or graph point | Reset that control |
+| Home on a focused knob, band fader, or graph | Reset the control or selected band |
+
+## Tests
+
+CTest runs three suites:
+
+| Suite | Coverage |
+| --- | --- |
+| `DSPUnitTest` | Filters, EQ response at 44.1/48/96 kHz, spectrum output, limiter transparency and ceiling, and effects bypass |
+| `PresetRoundTrip` | Preset serialization, validation, legacy import, saving, and deletion |
+| `UIStateAndControls` | Response graph rendering and editing, preset selection, mode changes, bypass, mixer settings persistence, and session restore |
+
+The UI suite runs offscreen without starting audio capture. It writes `build/tests/ui-preview.png` and `build/tests/eq-graph-preview.png` for visual inspection. These automated tests do not verify live system audio capture or physical output devices.
+
+For a short startup check that exits automatically without starting audio capture, run this inside the development shell:
+
+```bash
+QT_QPA_PLATFORM=offscreen ./build/eqMax.app/Contents/MacOS/eqMax --smoke-test
 ```
-eqMax/
-├── flake.nix                  # Nix Flake environment & build specification
-├── CMakeLists.txt             # CMake build configuration (C++20, Qt6, CoreAudio, vDSP)
-├── src/
-│   ├── main.cpp               # App entry point (QApplication, TrayIcon, MainWindow)
-│   ├── dsp/                   # High-performance DSP Engine
-│   │   ├── BiquadFilter.hpp/.cpp      # 2nd-order IIR RBJ filter cascades
-│   │   ├── EqualizerEngine.hpp/.cpp   # 3 / 10 / 32 band EQ engine
-│   │   ├── ProEffectsEngine.hpp/.cpp  # Volume boost, Limiter, 3D Spatial, Balance
-│   │   └── SpectrumAnalyzer.hpp/.cpp  # vDSP FFT & logarithmic band energy binning
-│   ├── audio/                 # macOS CoreAudio & Driver Interface
-│   │   └── AudioDeviceManager.hpp/.mm # CoreAudio HAL enumeration & IOProc callback
-│   ├── preset/                # Preset Storage System
-│   │   └── PresetManager.hpp/.cpp     # Factory & JSON user preset management
-│   └── ui/                    # Modern macOS Dark Qt6 GUI
-│       ├── CustomSlider.hpp/.cpp      # Vertical EQ gain slider widget
-│       ├── SpectrumWidget.hpp/.cpp    # 60 FPS spectrum analyzer canvas
-│       ├── VUMeterWidget.hpp/.cpp      # Stereo L/R level meters & overload LEDs
-│       ├── MainWindow.hpp/.cpp        # Control Center main window & tabs
-│       └── TrayIconManager.hpp/.cpp   # System menu bar tray integration
-└── tests/
-    ├── CMakeLists.txt         # Unit tests build script
-    └── test_dsp.cpp           # DSP engine test suite
+
+## Source layout
+
+```text
+src/
+├── audio/     Core Audio routing, process discovery, and per-app gain state
+├── dsp/       Biquad EQ, effects, limiter, and spectrum analysis
+├── preset/    Factory presets and user preset storage
+├── ui/        Main window, response graph, controls, meters, and menu bar icon
+├── docs/      Audio architecture notes
+└── main.cpp   Application startup and smoke-test mode
+tests/         DSP, preset, and offscreen UI regression suites
+macOS/         Bundle metadata, app icon, and icon generator
 ```
-
----
-
-## 🛠️ Tech Stack & Standards
-
-- **Language**: C++20 (`std::span`, `std::numbers`, RAII, atomic lock-free queues, smart pointers)
-- **GUI Framework**: Qt 6.11 (QtWidgets, custom QPainter 60FPS visualizers)
-- **Audio DSP**: Apple Accelerate vDSP & CoreAudio HAL framework
-- **Package & Dev Environment**: Nix Flakes
-- **Build System**: CMake 3.20+ & Ninja
