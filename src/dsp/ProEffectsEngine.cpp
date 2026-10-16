@@ -8,20 +8,22 @@ ProEffectsEngine::ProEffectsEngine() {
     haasBufferL_.resize(1024, 0.0f);
 }
 
+void ProEffectsEngine::setSampleRate(float sampleRate) noexcept {
+    if (std::isfinite(sampleRate) && sampleRate >= 8000) sampleRate_.store(sampleRate, std::memory_order_relaxed);
+}
+
 void ProEffectsEngine::setBassBoostdB(float gaindB, float sampleRate) noexcept {
-    bassBoostdB_.store(gaindB, std::memory_order_relaxed);
-    leftBassFilter_.configure(FilterType::LowShelf, 90.0f, sampleRate, gaindB, 0.707f);
-    rightBassFilter_.configure(FilterType::LowShelf, 90.0f, sampleRate, gaindB, 0.707f);
+    setSampleRate(sampleRate);
+    if (std::isfinite(gaindB)) bassBoostdB_.store(std::clamp(gaindB, 0.0f, 12.0f), std::memory_order_relaxed);
 }
 
 void ProEffectsEngine::setTrebleBoostdB(float gaindB, float sampleRate) noexcept {
-    trebleBoostdB_.store(gaindB, std::memory_order_relaxed);
-    leftTrebleFilter_.configure(FilterType::HighShelf, 8000.0f, sampleRate, gaindB, 0.707f);
-    rightTrebleFilter_.configure(FilterType::HighShelf, 8000.0f, sampleRate, gaindB, 0.707f);
+    setSampleRate(sampleRate);
+    if (std::isfinite(gaindB)) trebleBoostdB_.store(std::clamp(gaindB, 0.0f, 12.0f), std::memory_order_relaxed);
 }
 
 void ProEffectsEngine::processStereo(float* left, float* right, size_t numFrames) noexcept {
-    if (!left || !right || numFrames == 0) return;
+    if (isBypassed() || !left || !right || numFrames == 0) return;
 
     const float boostdB = volumeBoostdB_.load(std::memory_order_relaxed);
     const float boostLinear = std::pow(10.0f, boostdB / 20.0f);
@@ -38,8 +40,21 @@ void ProEffectsEngine::processStereo(float* left, float* right, size_t numFrames
     const float bassdB = bassBoostdB_.load(std::memory_order_relaxed);
     const float trebledB = trebleBoostdB_.load(std::memory_order_relaxed);
 
-    const float attack = 0.001f;
-    const float release = 0.999f;
+    const float sampleRate = sampleRate_.load(std::memory_order_relaxed);
+    // Coefficients and filter state belong exclusively to the audio thread.
+    if (sampleRate != audioSampleRate_ || bassdB != audioBassdB_) {
+        leftBassFilter_.configure(FilterType::LowShelf, 90, sampleRate, bassdB, 0.707f);
+        rightBassFilter_.configure(FilterType::LowShelf, 90, sampleRate, bassdB, 0.707f);
+    }
+    if (sampleRate != audioSampleRate_ || trebledB != audioTrebledB_) {
+        leftTrebleFilter_.configure(FilterType::HighShelf, 8000, sampleRate, trebledB, 0.707f);
+        rightTrebleFilter_.configure(FilterType::HighShelf, 8000, sampleRate, trebledB, 0.707f);
+    }
+    audioSampleRate_ = sampleRate;
+    audioBassdB_ = bassdB;
+    audioTrebledB_ = trebledB;
+
+    const float release = std::exp(-1.0f / (0.05f * sampleRate));
 
     for (size_t i = 0; i < numFrames; ++i) {
         float l = left[i];
@@ -67,19 +82,15 @@ void ProEffectsEngine::processStereo(float* left, float* right, size_t numFrames
         l *= gainL;
         r *= gainR;
 
-        // 4. Soft Clipper / Limiter
+        // 4. Stereo-linked peak limiter. Unity audio stays untouched below the ceiling.
         if (enableLimiter) {
-            // Peak envelope tracking
-            float maxSample = std::max(std::abs(l), std::abs(r));
-            if (maxSample > peakEnvelope_) {
-                peakEnvelope_ = peakEnvelope_ * attack + maxSample * (1.0f - attack);
-            } else {
-                peakEnvelope_ = peakEnvelope_ * release + maxSample * (1.0f - release);
-            }
-
-            // Smooth saturation curve (tanh soft clipping for pleasant analog warm overdrive)
-            l = std::tanh(l);
-            r = std::tanh(r);
+            const float peak = std::max(std::abs(l), std::abs(r));
+            peakEnvelope_ = std::max(peak, peakEnvelope_ * release);
+            const float gain = peakEnvelope_ > 0.98f ? 0.98f / peakEnvelope_ : 1.0f;
+            l *= gain;
+            r *= gain;
+        } else {
+            peakEnvelope_ = 0;
         }
 
         left[i] = l;

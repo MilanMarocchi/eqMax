@@ -1,4 +1,5 @@
 #include "BiquadFilter.hpp"
+#include <complex>
 
 namespace eqmax::dsp {
 
@@ -88,6 +89,13 @@ void BiquadFilter::configure(FilterType type, float centerFreq, float sampleRate
 void BiquadFilter::reset() noexcept {
     z1_ = 0.0f;
     z2_ = 0.0f;
+}
+
+float BiquadFilter::magnitudedB(float frequency) const noexcept {
+    const auto z = std::polar(1.0, -2.0 * std::numbers::pi * frequency / sampleRate_);
+    const auto numerator = static_cast<double>(b0_) + static_cast<double>(b1_) * z + static_cast<double>(b2_) * z * z;
+    const auto denominator = 1.0 + static_cast<double>(a1_) * z + static_cast<double>(a2_) * z * z;
+    return static_cast<float>(20.0 * std::log10(std::max(1e-12, std::abs(numerator / denominator))));
 }
 
 void BiquadFilter::processBlock(std::span<float> samples) noexcept {

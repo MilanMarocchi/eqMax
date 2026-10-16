@@ -8,6 +8,7 @@
 #include "EqualizerEngine.hpp"
 #include "ProEffectsEngine.hpp"
 #include "SpectrumAnalyzer.hpp"
+#include "AppVolumeManager.hpp"
 
 namespace eqmax::audio {
 
@@ -27,12 +28,20 @@ enum class TestSignalType {
     SineSweep
 };
 
+/**
+ * @brief Routes all system audio through the DSP chain.
+ *
+ * Uses Core Audio process taps (macOS 14.2+): every other process's output is captured and muted,
+ * mixed with per-application gain, processed (EQ, effects, analyzer) and rendered to the real
+ * output device through a private aggregate device.
+ */
 class AudioDeviceManager {
 public:
     AudioDeviceManager(
         std::shared_ptr<dsp::EqualizerEngine> eqEngine,
         std::shared_ptr<dsp::ProEffectsEngine> effectsEngine,
-        std::shared_ptr<dsp::SpectrumAnalyzer> spectrumAnalyzer
+        std::shared_ptr<dsp::SpectrumAnalyzer> spectrumAnalyzer,
+        std::shared_ptr<AppVolumeManager> appVolumeManager
     );
     ~AudioDeviceManager();
 
@@ -42,37 +51,40 @@ public:
     std::vector<AudioDeviceInfo> getAudioDevices();
 
     /**
-     * @brief Request macOS Microphone / System Audio Recording permissions via AVFoundation.
+     * @brief Open the macOS "Screen & System Audio Recording" privacy settings.
+     * System audio capture permission is prompted automatically the first time routing starts.
      */
     void requestAudioPermissions();
 
     /**
-     * @brief Set target input/output devices.
+     * @brief Set target output device (0 = follow the system default output device).
      */
     bool setOutputDevice(uint32_t deviceId);
-    bool setInputDevice(uint32_t deviceId);
 
     /**
-     * @brief Start audio stream IO processing callback loop.
+     * @brief Start capturing system audio and routing it through the DSP chain.
      */
     bool start();
 
     /**
-     * @brief Stop audio stream IO processing callback loop.
+     * @brief Stop routing; applications play directly to their devices again.
      */
     void stop();
 
     [[nodiscard]] bool isRunning() const noexcept { return isRunning_.load(std::memory_order_relaxed); }
-    [[nodiscard]] uint32_t currentSampleRate() const noexcept { return sampleRate_; }
+    [[nodiscard]] bool isRoutingActive() const noexcept { return routingActive_.load(std::memory_order_relaxed); }
+    [[nodiscard]] uint32_t currentSampleRate() const noexcept { return sampleRate_.load(std::memory_order_relaxed); }
 
     // Built-in audio generator control
     void setTestSignalType(TestSignalType type) noexcept { testSignalType_.store(type, std::memory_order_relaxed); }
     [[nodiscard]] TestSignalType testSignalType() const noexcept { return testSignalType_.load(std::memory_order_relaxed); }
 
     /**
-     * @brief Process real-time frame block (called by CoreAudio IOProc callback or internal test generator).
+     * @brief Process real-time frame block (called by CoreAudio IOProc callback).
      */
     void processAudioBlock(float* left, float* right, size_t numFrames) noexcept;
+
+    struct Impl;
 
 private:
     void generateTestSignal(float* left, float* right, size_t numFrames) noexcept;
@@ -80,20 +92,19 @@ private:
     std::shared_ptr<dsp::EqualizerEngine> eqEngine_;
     std::shared_ptr<dsp::ProEffectsEngine> effectsEngine_;
     std::shared_ptr<dsp::SpectrumAnalyzer> spectrumAnalyzer_;
+    std::shared_ptr<AppVolumeManager> appVolumeManager_;
 
     std::atomic<bool> isRunning_{false};
-    uint32_t sampleRate_{44100};
-    uint32_t outputDeviceId_{0};
-    uint32_t inputDeviceId_{0};
+    std::atomic<bool> routingActive_{false};
+    std::atomic<uint32_t> sampleRate_{44100};
 
     std::atomic<TestSignalType> testSignalType_{TestSignalType::None};
     float sinePhase_{0.0f};
     float sweepPhase_{0.0f};
     uint32_t pinkNoiseState_{0x12345678};
 
-    // CoreAudio OS X handle pointers
-    uintptr_t audioProcHandle_{0};
-    uintptr_t audioInputProcHandle_{0};
+    // CoreAudio routing state (taps, aggregate device, IOProc, listeners)
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace eqmax::audio

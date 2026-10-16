@@ -59,6 +59,7 @@ public:
     [[nodiscard]] float centerFrequency() const noexcept { return centerFreq_; }
     [[nodiscard]] float gaindB() const noexcept { return gaindB_; }
     [[nodiscard]] FilterType type() const noexcept { return type_; }
+    [[nodiscard]] float magnitudedB(float frequency) const noexcept;
 
 private:
     FilterType type_{FilterType::Peaking};

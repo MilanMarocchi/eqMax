@@ -17,6 +17,7 @@ public:
 
     void setNumBands(size_t bands);
     void setRefreshRate(int fps = 60);
+    void setShowLegend(bool show);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -25,6 +26,7 @@ private:
     std::shared_ptr<dsp::SpectrumAnalyzer> analyzer_;
     QTimer updateTimer_;
     size_t numBands_{32};
+    bool showLegend_{true};
     std::vector<float> peakHold_;
 };
 

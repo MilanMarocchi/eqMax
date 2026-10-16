@@ -1,5 +1,6 @@
 #include "TrayIconManager.hpp"
 #include "MainWindow.hpp"
+#include "Theme.hpp"
 #include <QPixmap>
 #include <QPainter>
 #include <QCoreApplication>
@@ -17,17 +18,22 @@ TrayIconManager::TrayIconManager(
       presetManager_(std::move(presetManager)) {
 
     createTrayIcon();
+    connect(mainWindow_, &MainWindow::bypassChanged, bypassAction_, &QAction::setChecked);
+    connect(mainWindow_, &MainWindow::presetsChanged, this, &TrayIconManager::updatePresetsMenu);
+    connect(presetsMenu_, &QMenu::aboutToShow, this, &TrayIconManager::updatePresetsMenu);
+    bypassAction_->setChecked(mainWindow_->isBypassed());
 }
 
 void TrayIconManager::createTrayIcon() {
     // Generate a sleek macOS menu bar icon dynamically
-    QPixmap iconPixmap(22, 22);
+    QPixmap iconPixmap(44, 44);
+    iconPixmap.setDevicePixelRatio(2);
     iconPixmap.fill(Qt::transparent);
     QPainter painter(&iconPixmap);
     painter.setRenderHint(QPainter::Antialiasing);
 
     // Draw stylized EQ bars in icon
-    painter.setBrush(QColor(0, 229, 255));
+    painter.setBrush(Qt::black);
     painter.setPen(Qt::NoPen);
     painter.drawRoundedRect(3, 10, 3, 9, 1, 1);
     painter.drawRoundedRect(8, 4, 3, 15, 1, 1);
@@ -47,7 +53,7 @@ void TrayIconManager::createTrayIcon() {
     trayMenu_->addSeparator();
 
     // Bypass Action
-    bypassAction_ = trayMenu_->addAction("Bypass EQ");
+    bypassAction_ = trayMenu_->addAction("Bypass EQ & Effects");
     bypassAction_->setCheckable(true);
     connect(bypassAction_, &QAction::triggered, [this](bool checked) {
         mainWindow_->setBypass(checked);
@@ -65,7 +71,9 @@ void TrayIconManager::createTrayIcon() {
         QCoreApplication::quit();
     });
 
-    trayIcon_ = new QSystemTrayIcon(QIcon(iconPixmap), this);
+    QIcon menuIcon(iconPixmap);
+    menuIcon.setIsMask(true); // Let macOS match the current menu bar appearance.
+    trayIcon_ = new QSystemTrayIcon(menuIcon, this);
     trayIcon_->setContextMenu(trayMenu_);
     trayIcon_->setToolTip("eqMax - macOS Audio Equalizer & Pro Enhancer");
     trayIcon_->show();

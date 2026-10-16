@@ -5,6 +5,8 @@
 #include <map>
 #include <filesystem>
 #include <memory>
+#include <optional>
+#include <QByteArray>
 #include "../dsp/EqualizerEngine.hpp"
 
 namespace eqmax::preset {
@@ -18,11 +20,13 @@ struct Preset {
     float bassBoostdB{0.0f};
     float trebleBoostdB{0.0f};
     bool isFactory{false};
+    float balance{0.0f};
+    bool limiterEnabled{true};
 };
 
 class PresetManager {
 public:
-    PresetManager();
+    explicit PresetManager(std::filesystem::path storageDirectory = {});
     ~PresetManager() = default;
 
     /**
@@ -60,8 +64,15 @@ public:
      */
     std::filesystem::path getPresetsDirectory() const;
 
+    static QByteArray serialize(const Preset& preset);
+    static std::optional<Preset> deserialize(const QByteArray& data);
+    static std::optional<Preset> readPresetFile(const QString& path);
+    static bool writePresetFile(const QString& path, const Preset& preset);
+
 private:
     std::map<std::string, Preset> presets_;
+    std::map<std::string, std::filesystem::path> userPaths_;
+    std::filesystem::path storageDirectory_;
 };
 
 } // namespace eqmax::preset

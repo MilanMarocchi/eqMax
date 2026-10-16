@@ -1,4 +1,5 @@
 #include "VUMeterWidget.hpp"
+#include "Theme.hpp"
 #include <QLinearGradient>
 #include <QPaintEvent>
 #include <algorithm>
@@ -26,7 +27,9 @@ void VUMeterWidget::paintEvent(QPaintEvent* event) {
     const int w = width();
     const int h = height();
 
-    painter.fillRect(rect(), QColor(24, 24, 30));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(theme::Window);
+    painter.drawRoundedRect(rect(), 6, 6);
 
     if (!analyzer_) return;
 
@@ -65,12 +68,15 @@ void VUMeterWidget::paintEvent(QPaintEvent* event) {
     // Draw Left & Right Meter Channels
     auto drawChannel = [&](int x, float rms, float peak, bool clip, const QString& label) {
         // Channel Label (L / R)
-        painter.setPen(QColor(180, 180, 200));
-        painter.setFont(QFont("sans-serif", 10, QFont::Bold));
+        painter.setPen(theme::TextSecondary);
+        QFont labelFont = font();
+        labelFont.setPixelSize(10);
+        labelFont.setWeight(QFont::DemiBold);
+        painter.setFont(labelFont);
         painter.drawText(QRect(x, 5, meterW, 18), Qt::AlignCenter, label);
 
         // Meter Track
-        painter.fillRect(QRect(x, topY, meterW, meterH), QColor(15, 15, 20));
+        painter.fillRect(QRect(x, topY, meterW, meterH), theme::Track.darker(160));
 
         // RMS Bar
         float normRms = std::clamp(rms * 2.0f, 0.0f, 1.0f);
@@ -78,20 +84,20 @@ void VUMeterWidget::paintEvent(QPaintEvent* event) {
         int barY = topY + (meterH - barH);
 
         QLinearGradient grad(x, topY + meterH, x, topY);
-        grad.setColorAt(0.0, QColor(0, 230, 120));  // Green
-        grad.setColorAt(0.7, QColor(255, 200, 0));  // Yellow
-        grad.setColorAt(1.0, QColor(255, 40, 40));  // Red
+        grad.setColorAt(0.0, theme::AccentDim);
+        grad.setColorAt(0.7, theme::Accent);
+        grad.setColorAt(1.0, theme::Danger);
 
         painter.fillRect(QRect(x, barY, meterW, barH), grad);
 
         // Peak Hold Line
         float normPeak = std::clamp(peak * 2.0f, 0.0f, 1.0f);
         int peakY = topY + (meterH - static_cast<int>(normPeak * meterH));
-        painter.setPen(QPen(QColor(255, 255, 255), 2));
+        painter.setPen(QPen(QColor(255, 255, 255, 180), 1.5));
         painter.drawLine(x, peakY, x + meterW, peakY);
 
         // Clip Indicator Light
-        QColor clipColor = clip ? QColor(255, 30, 30) : QColor(50, 15, 15);
+        QColor clipColor = clip ? theme::Danger : theme::Track;
         painter.setBrush(clipColor);
         painter.setPen(Qt::NoPen);
         painter.drawEllipse(QPoint(x + meterW / 2, topY + meterH + 6), 4, 4);

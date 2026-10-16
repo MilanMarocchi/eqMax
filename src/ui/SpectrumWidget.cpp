@@ -1,4 +1,5 @@
 #include "SpectrumWidget.hpp"
+#include "Theme.hpp"
 #include <QLinearGradient>
 #include <QPaintEvent>
 #include <algorithm>
@@ -29,70 +30,74 @@ void SpectrumWidget::setRefreshRate(int fps) {
     updateTimer_.setInterval(interval);
 }
 
+void SpectrumWidget::setShowLegend(bool show) {
+    showLegend_ = show;
+    update();
+}
+
 void SpectrumWidget::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
     const int w = width();
     const int h = height();
+    const int legendHeight = showLegend_ ? 18 : 0;
+    const float plotHeight = static_cast<float>(h - legendHeight);
 
-    // 1. Dark Glass Background
-    painter.fillRect(rect(), QColor(24, 24, 30));
+    // Background panel
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(theme::Window);
+    painter.drawRoundedRect(rect(), 6, 6);
 
-    // 2. Draw Subtle Frequency Grid Lines (-12dB, -24dB, -36dB, -48dB)
-    painter.setPen(QPen(QColor(255, 255, 255, 15), 1, Qt::DashLine));
-    for (int db = 1; db < 4; ++db) {
-        int y = h * db / 4;
+    // Subtle level grid
+    painter.setPen(QPen(QColor(255, 255, 255, 12), 1));
+    for (int i = 1; i < 4; ++i) {
+        const int y = static_cast<int>(plotHeight * i / 4);
         painter.drawLine(0, y, w, y);
     }
 
     if (!analyzer_) return;
 
-    // 3. Retrieve spectrum energy levels
     auto energies = analyzer_->getBandEnergies(numBands_);
     if (energies.empty()) return;
 
     const float barSpacing = 2.0f;
     const float totalSpacing = barSpacing * (numBands_ + 1);
-    const float barWidth = (w - totalSpacing) / static_cast<float>(numBands_);
+    const float barWidth = std::max(1.0f, (w - totalSpacing) / static_cast<float>(numBands_));
+    const float usableHeight = plotHeight - 4.0f;
 
-    for (size_t i = 0; i < numBands_; ++i) {
-        float val = std::clamp(energies[i], 0.0f, 1.0f);
-        
-        // Update Peak Hold
-        if (val > peakHold_[i]) {
-            peakHold_[i] = val;
-        } else {
-            peakHold_[i] *= 0.96f; // Peak gravity drop
-        }
+    for (size_t i = 0; i < numBands_ && i < energies.size(); ++i) {
+        const float val = std::clamp(energies[i], 0.0f, 1.0f);
+        peakHold_[i] = val > peakHold_[i] ? val : peakHold_[i] * 0.96f;
 
-        float x = barSpacing + i * (barWidth + barSpacing);
-        float barHeight = val * (h - 20);
-        float y = h - 20 - barHeight;
+        const float x = barSpacing + i * (barWidth + barSpacing);
+        const float barHeight = std::max(1.0f, val * usableHeight);
+        const float y = plotHeight - barHeight;
 
-        // 4. Create Vibrant Gradient for Spectrum Bars
-        QLinearGradient grad(x, h - 20, x, y);
-        grad.setColorAt(0.0, QColor(0, 229, 255, 220));   // Bright Cyan at bottom
-        grad.setColorAt(0.7, QColor(0, 136, 255, 240));   // Deep Blue in middle
-        grad.setColorAt(1.0, QColor(180, 0, 255, 255));   // Electric Purple at top
+        QLinearGradient grad(x, plotHeight, x, 0);
+        grad.setColorAt(0.0, theme::AccentDim);
+        grad.setColorAt(1.0, theme::Accent);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(grad);
+        painter.drawRoundedRect(QRectF(x, y, barWidth, barHeight), 1.0, 1.0);
 
-        painter.fillRect(QRectF(x, y, barWidth, barHeight), grad);
-
-        // 5. Draw Peak Hold Line
-        float peakY = h - 20 - (peakHold_[i] * (h - 20));
-        painter.setPen(QPen(QColor(255, 255, 255, 200), 1.5));
+        const float peakY = plotHeight - peakHold_[i] * usableHeight;
+        painter.setPen(QPen(QColor(255, 255, 255, 110), 1.0));
         painter.drawLine(QPointF(x, peakY), QPointF(x + barWidth, peakY));
     }
 
-    // 6. Draw Frequency Legend at bottom
-    painter.setPen(QColor(160, 160, 180));
-    QFont font("sans-serif", 9);
-    painter.setFont(font);
-    painter.drawText(QRect(5, h - 18, 60, 16), Qt::AlignLeft, "20 Hz");
-    painter.drawText(QRect(w / 4 - 30, h - 18, 60, 16), Qt::AlignCenter, "250 Hz");
-    painter.drawText(QRect(w / 2 - 30, h - 18, 60, 16), Qt::AlignCenter, "1 kHz");
-    painter.drawText(QRect(3 * w / 4 - 30, h - 18, 60, 16), Qt::AlignCenter, "8 kHz");
-    painter.drawText(QRect(w - 65, h - 18, 60, 16), Qt::AlignRight, "20 kHz");
+    if (showLegend_) {
+        painter.setPen(theme::TextSecondary);
+        QFont legendFont = font();
+        legendFont.setPixelSize(10);
+        painter.setFont(legendFont);
+        const int textY = h - legendHeight;
+        painter.drawText(QRect(6, textY, 60, legendHeight), Qt::AlignLeft | Qt::AlignVCenter, "20 Hz");
+        painter.drawText(QRect(w / 4 - 30, textY, 60, legendHeight), Qt::AlignCenter, "250 Hz");
+        painter.drawText(QRect(w / 2 - 30, textY, 60, legendHeight), Qt::AlignCenter, "1 kHz");
+        painter.drawText(QRect(3 * w / 4 - 30, textY, 60, legendHeight), Qt::AlignCenter, "8 kHz");
+        painter.drawText(QRect(w - 66, textY, 60, legendHeight), Qt::AlignRight | Qt::AlignVCenter, "20 kHz");
+    }
 }
 
 } // namespace eqmax::ui

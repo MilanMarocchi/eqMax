@@ -13,6 +13,11 @@ public:
     ProEffectsEngine();
     ~ProEffectsEngine() = default;
 
+    void setBypass(bool bypassed) noexcept { bypassed_.store(bypassed, std::memory_order_relaxed); }
+    [[nodiscard]] bool isBypassed() const noexcept { return bypassed_.load(std::memory_order_relaxed); }
+
+    void setSampleRate(float sampleRate) noexcept;
+
     // Volume Boost (Gain in dB: 0dB to +24dB)
     void setVolumeBoostdB(float gaindB) noexcept { volumeBoostdB_.store(gaindB, std::memory_order_relaxed); }
     [[nodiscard]] float volumeBoostdB() const noexcept { return volumeBoostdB_.load(std::memory_order_relaxed); }
@@ -30,11 +35,11 @@ public:
     [[nodiscard]] float spatialWidth() const noexcept { return spatialWidth_.load(std::memory_order_relaxed); }
 
     // Bass Boost Intensity (0.0 to 12.0 dB)
-    void setBassBoostdB(float gaindB, float sampleRate = 44100.0f) noexcept;
+    void setBassBoostdB(float gaindB, float sampleRate = 0.0f) noexcept;
     [[nodiscard]] float bassBoostdB() const noexcept { return bassBoostdB_.load(std::memory_order_relaxed); }
 
     // Treble Boost Intensity (0.0 to 12.0 dB)
-    void setTrebleBoostdB(float gaindB, float sampleRate = 44100.0f) noexcept;
+    void setTrebleBoostdB(float gaindB, float sampleRate = 0.0f) noexcept;
     [[nodiscard]] float trebleBoostdB() const noexcept { return trebleBoostdB_.load(std::memory_order_relaxed); }
 
     /**
@@ -43,12 +48,18 @@ public:
     void processStereo(float* left, float* right, size_t numFrames) noexcept;
 
 private:
+    std::atomic<bool> bypassed_{false};
     std::atomic<float> volumeBoostdB_{0.0f};
     std::atomic<bool> limiterEnabled_{true};
     std::atomic<float> balance_{0.0f};
     std::atomic<float> spatialWidth_{1.0f}; // 1.0 = unchanged stereo
     std::atomic<float> bassBoostdB_{0.0f};
     std::atomic<float> trebleBoostdB_{0.0f};
+
+    std::atomic<float> sampleRate_{44100};
+    float audioSampleRate_{0};
+    float audioBassdB_{0};
+    float audioTrebledB_{0};
 
     // Dedicated filters for Bass/Treble boost sub-engine
     BiquadFilter leftBassFilter_;

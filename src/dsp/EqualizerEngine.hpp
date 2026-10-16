@@ -6,6 +6,7 @@
 #include <memory>
 #include <atomic>
 #include <span>
+#include <mutex>
 
 namespace eqmax::dsp {
 
@@ -26,12 +27,13 @@ public:
     EqualizerEngine();
     ~EqualizerEngine() = default;
 
-    void setMode(EQMode mode, float sampleRate = 44100.0f);
+    void setMode(EQMode mode, float sampleRate = 0.0f);
     [[nodiscard]] EQMode mode() const noexcept { return currentMode_; }
 
-    void setBandGain(size_t bandIndex, float gaindB, float sampleRate = 44100.0f);
-    void setAllGains(const std::vector<float>& gains, float sampleRate = 44100.0f);
-    void resetGains(float sampleRate = 44100.0f);
+    void setBandGain(size_t bandIndex, float gaindB, float sampleRate = 0.0f);
+    void setAllGains(const std::vector<float>& gains, float sampleRate = 0.0f);
+    void resetGains(float sampleRate = 0.0f);
+    void setSampleRate(float sampleRate) noexcept;
 
     [[nodiscard]] size_t numBands() const noexcept;
     [[nodiscard]] const std::vector<BandInfo>& bandInfos() const noexcept { return bandInfos_; }
@@ -56,12 +58,24 @@ public:
     static const std::array<float, 32> THIRTY_TWO_BAND_FREQS;
 
 private:
-    void rebuildFilters(float sampleRate);
+    void publishConfiguration();
+    void updateAudioConfiguration() noexcept;
 
     EQMode currentMode_{EQMode::TenBand};
     std::atomic<bool> bypassed_{false};
 
+    // bandInfos_ belongs to the UI. The audio thread only reads its own fixed-size snapshot.
     std::vector<BandInfo> bandInfos_;
+    struct Configuration {
+        std::array<BandInfo, 32> bands{};
+        size_t count{0};
+        EQMode mode{EQMode::TenBand};
+        uint64_t version{0};
+    };
+    std::mutex configurationMutex_;
+    Configuration pending_, audio_;
+    std::atomic<float> sampleRate_{44100};
+    float audioSampleRate_{0};
     // Stereo cascades: separate filter instances for Left and Right channels to maintain phase and state
     std::vector<BiquadFilter> leftFilters_;
     std::vector<BiquadFilter> rightFilters_;
